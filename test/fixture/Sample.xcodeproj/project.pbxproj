@@ -1,0 +1,31 @@
+// !$*UTF8*$!
+// Minimal pbxproj fixture used by .github/workflows/test.yml.
+// It is NOT a fully-formed Xcode project — it only contains the
+// XCRemoteSwiftPackageReference section that update_spm.py parses.
+{
+    archiveVersion = 1;
+    objectVersion = 56;
+    rootObject = AAAA000000000000000000AA /* Project object */;
+    objects = {
+
+/* Begin XCRemoteSwiftPackageReference section */
+        BBBB000000000000000001BB /* XCRemoteSwiftPackageReference "swift-log" */ = {
+            isa = XCRemoteSwiftPackageReference;
+            repositoryURL = "https://github.com/apple/swift-log";
+            requirement = {
+                kind = upToNextMajorVersion;
+                minimumVersion = 1.0.0;
+            };
+        };
+        BBBB000000000000000002BB /* XCRemoteSwiftPackageReference "swift-collections" */ = {
+            isa = XCRemoteSwiftPackageReference;
+            repositoryURL = "https://github.com/apple/swift-collections";
+            requirement = {
+                kind = upToNextMajorVersion;
+                minimumVersion = 1.0.0;
+            };
+        };
+/* End XCRemoteSwiftPackageReference section */
+
+    };
+}
