@@ -83,7 +83,7 @@ def _requirement_to_swift(req, name):
     raise ValueError(f"Unsupported requirement kind '{kind}' for dependency '{name}'")
 
 
-def render_manifest(deps, tools_version="5.9"):
+def render_manifest(deps, tools_version="5.10"):
     lines = [
         f"// swift-tools-version:{tools_version}",
         "// AUTO-GENERATED throwaway manifest used only to resolve dependency versions.",
@@ -159,7 +159,9 @@ def main():
                     help="Path to the .xcodeproj (autodetected from --search-dir if omitted)")
     ap.add_argument("--search-dir", default=".",
                     help="Directory to search for a .xcodeproj when --project is not given (default: .)")
-    ap.add_argument("--tools-version", default="5.9")
+    ap.add_argument("--tools-version", default="5.10",
+                    help="swift-tools-version for the synthetic manifest. Determines Package.resolved format "
+                         "(5.9 -> v2, 5.10+ -> v3 with originHash). Default 5.10 matches Xcode 15.3+.")
     ap.add_argument("--dry-run", action="store_true",
                     help="Generate manifest and resolve into a temp dir, but don't overwrite the project's Package.resolved")
     ap.add_argument("--print-manifest", action="store_true", help="Print the synthetic Package.swift and exit")
