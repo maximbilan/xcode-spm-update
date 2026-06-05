@@ -1,0 +1,71 @@
+name: 'Update Xcode Swift Packages'
+description: 'Bump an Xcode project''s Swift Package Manager pins on Xcode 16+ by resolving a synthetic Package.swift with swift package update.'
+author: 'Maksym Bilan'
+branding:
+  icon: 'refresh-cw'
+  color: 'orange'
+
+inputs:
+  project:
+    description: 'Path to the .xcodeproj. If empty, the action autodetects a single .xcodeproj under working-directory.'
+    required: false
+    default: ''
+  working-directory:
+    description: 'Directory the action runs in (used for autodetection and as the cwd of the script).'
+    required: false
+    default: '.'
+  xcode-version:
+    description: 'Xcode version to select via xcode-select before resolving (e.g. "16.4"). Leave empty to use the runner default.'
+    required: false
+    default: ''
+  fail-when-outdated:
+    description: 'If "true", the action exits non-zero when any dependency would be updated. Useful as a CI guard.'
+    required: false
+    default: 'false'
+  dry-run:
+    description: 'If "true", resolve into a temp dir and report changes without writing Package.resolved back to the project.'
+    required: false
+    default: 'false'
+
+outputs:
+  dependencies-changed:
+    description: '"true" if at least one pin would change, otherwise "false".'
+    value: ${{ steps.run.outputs.dependencies-changed }}
+  changed-count:
+    description: 'Number of pins that changed (integer, as a string).'
+    value: ${{ steps.run.outputs.changed-count }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Select Xcode
+      if: inputs.xcode-version != ''
+      shell: bash
+      run: |
+        set -euo pipefail
+        sudo xcode-select -s "/Applications/Xcode_${{ inputs.xcode-version }}.app"
+        xcodebuild -version
+
+    - name: Resolve Swift package dependencies
+      id: run
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        INPUT_PROJECT: ${{ inputs.project }}
+        INPUT_DRY_RUN: ${{ inputs.dry-run }}
+        INPUT_FAIL_WHEN_OUTDATED: ${{ inputs.fail-when-outdated }}
+      run: |
+        set -euo pipefail
+        args=()
+        if [ -n "$INPUT_PROJECT" ]; then
+          args+=(--project "$INPUT_PROJECT")
+        else
+          args+=(--search-dir .)
+        fi
+        if [ "$INPUT_DRY_RUN" = "true" ]; then
+          args+=(--dry-run)
+        fi
+        if [ "$INPUT_FAIL_WHEN_OUTDATED" = "true" ]; then
+          args+=(--fail-when-outdated)
+        fi
+        python3 "$GITHUB_ACTION_PATH/update_spm.py" "${args[@]}"

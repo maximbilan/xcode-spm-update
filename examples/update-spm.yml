@@ -1,0 +1,50 @@
+name: Update Swift Packages
+
+# Bumps SPM dependencies to the latest versions allowed by the constraints in
+# project.pbxproj, then opens a PR with the new Package.resolved.
+#
+# Why not just `xcodebuild -resolvePackageDependencies`? On Xcode 16+ that path
+# stopped reliably bumping versions. The maximbilan/xcode-spm-update action
+# routes around it by handing a synthetic manifest to `swift package update`,
+# which still resolves correctly.
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'   # Mondays 06:00 UTC
+  workflow_dispatch: {}    # allow manual runs from the Actions tab
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    # The action shells out to `xcrun swift package update`, so the job must run
+    # on a macOS runner.
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update Swift packages
+        id: update
+        uses: maximbilan/xcode-spm-update@v1
+        with:
+          # Omit `project` to autodetect a single .xcodeproj under the repo root.
+          project: MySwimPro.xcodeproj
+          # Pin the Xcode version so Package.resolved format/originHash matches
+          # what your team's Xcode expects.
+          xcode-version: '16.4'
+
+      - name: Open pull request
+        if: steps.update.outputs.dependencies-changed == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: deps/spm-update
+          delete-branch: true
+          commit-message: 'chore: update Swift package dependencies'
+          title: 'Update Swift package dependencies'
+          body: |
+            Automated bump of Swift Package Manager pins.
+
+            ${{ steps.update.outputs.changed-count }} package(s) changed.
+          labels: dependencies

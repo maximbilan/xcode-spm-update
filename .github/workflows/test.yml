@@ -1,0 +1,62 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request: {}
+  workflow_dispatch: {}
+
+jobs:
+  selftest:
+    # Must be macOS — the action calls `xcrun swift package update`.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: |
+          xcodebuild -version
+          xcrun swift --version
+
+      - name: Run the action against the fixture project (dry-run)
+        id: action
+        uses: ./
+        with:
+          project: test/fixture/Sample.xcodeproj
+          dry-run: 'true'
+
+      - name: Assert outputs are set
+        env:
+          CHANGED: ${{ steps.action.outputs.dependencies-changed }}
+          COUNT: ${{ steps.action.outputs.changed-count }}
+        run: |
+          set -euo pipefail
+          echo "dependencies-changed='${CHANGED}'"
+          echo "changed-count='${COUNT}'"
+          if [ -z "${CHANGED}" ]; then
+            echo "::error::dependencies-changed output was not set"
+            exit 1
+          fi
+          if [ "${CHANGED}" != "true" ] && [ "${CHANGED}" != "false" ]; then
+            echo "::error::dependencies-changed must be 'true' or 'false' (got '${CHANGED}')"
+            exit 1
+          fi
+          if ! [[ "${COUNT}" =~ ^[0-9]+$ ]]; then
+            echo "::error::changed-count must be an integer (got '${COUNT}')"
+            exit 1
+          fi
+          # The fixture has no committed Package.resolved, so the fresh
+          # resolution should always report at least one new pin.
+          if [ "${CHANGED}" != "true" ]; then
+            echo "::error::expected dependencies-changed=true for a fixture with no prior Package.resolved"
+            exit 1
+          fi
+
+      - name: Ensure dry-run did not write Package.resolved into the fixture
+        run: |
+          set -euo pipefail
+          resolved="test/fixture/Sample.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
+          if [ -e "$resolved" ]; then
+            echo "::error::dry-run unexpectedly wrote $resolved"
+            exit 1
+          fi
