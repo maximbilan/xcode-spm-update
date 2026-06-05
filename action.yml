@@ -1,5 +1,5 @@
 name: 'Update Xcode Swift Packages'
-description: 'Bump an Xcode project''s Swift Package Manager pins on Xcode 16+ by resolving a synthetic Package.swift with swift package update.'
+description: 'Update Xcode SPM dependencies on Xcode 16+, where xcodebuild -resolvePackageDependencies stopped bumping versions.'
 author: 'Maksym Bilan'
 branding:
   icon: 'refresh-cw'
