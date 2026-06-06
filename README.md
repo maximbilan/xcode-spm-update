@@ -1,30 +1,53 @@
 # Update Xcode Swift Packages
 
-A composite GitHub Action that bumps an Xcode project's Swift Package Manager
-pins on Xcode 16+, where `xcodebuild -resolvePackageDependencies` stopped
-reliably updating versions.
+A GitHub Action that **actually updates Swift Package Manager dependencies in an `.xcodeproj`** — even on Xcode 16+, where the official tooling silently stopped doing it.
 
-## Why
+Think of it as `npm update` / `bundle update` / `go get -u ./...` for Swift packages pinned inside an Xcode project. Dependabot and Renovate don't cover this case; the only off-the-shelf action that wrapped `xcodebuild` no longer works reliably either.
 
-`xcodebuild -resolvePackageDependencies` is the documented way to refresh SPM
-pins from the command line. In Xcode 16+ that path frequently no-ops even when
-newer versions are available within the declared constraints — which is why
-most "update SPM" CI jobs (and the only off-the-shelf action that wraps
-xcodebuild) silently stopped doing their job.
+## The problem in one minute
 
-This action routes around the problem without reimplementing version solving:
+If you ship an iOS or macOS app, you probably have something like this on a schedule:
 
-1. Parses `XCRemoteSwiftPackageReference` entries (repo URL + version
-   requirement) straight out of `project.pbxproj`.
-2. Writes a throwaway `Package.swift` that declares those same dependencies.
-3. Runs `xcrun swift package update` on the synthetic manifest — the real
-   PubGrub solver resolves the full transitive graph.
-4. Copies the resulting `Package.resolved` back into the Xcode project's
-   internal workspace.
+```bash
+xcodebuild -resolvePackageDependencies -project MyApp.xcodeproj
+```
 
-The action is pure Python standard library — no `pip install`, no Node
-dependencies — and it must be run on a macOS runner because it shells out to
-the Swift toolchain.
+That command is Apple's documented way to refresh your `Package.resolved` (the lockfile that pins every Swift package to an exact version). The intent: a CI job runs this weekly, sees that `Alamofire 5.9.0 → 5.10.0` is now allowed by your version constraints, writes the new pin, and opens a PR.
+
+**On Xcode 16+, it frequently does nothing.** The command exits successfully, prints no errors, and leaves `Package.resolved` untouched — even when newer versions are clearly available within your declared `from:` / `upToNextMajor` ranges. Your weekly "update dependencies" job keeps reporting "no changes" while your pins quietly fall months behind.
+
+This Action is a drop-in replacement for that step.
+
+## Do I need this?
+
+You probably want this Action if **all** of the following are true:
+
+- [x] You maintain an iOS, macOS, watchOS, tvOS, or visionOS app
+- [x] Your Swift package dependencies are managed **inside an `.xcodeproj`** (not a standalone `Package.swift`)
+- [x] You're on Xcode 16 or newer
+- [x] You want CI to open PRs that bump those dependencies — and your existing automation has gone quiet
+
+If your project is a pure Swift package (top-level `Package.swift`), you don't need this — `swift package update` already works.
+
+## How the fix works
+
+Rather than fight `xcodebuild`, the Action sidesteps it:
+
+```
+.xcodeproj/project.pbxproj
+        │
+        │  parse XCRemoteSwiftPackageReference entries
+        ▼
+synthetic Package.swift  ──►  xcrun swift package update  ──►  fresh Package.resolved
+                                                                       │
+                                                                       │  copy back into
+                                                                       ▼
+                              .xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+```
+
+In other words: read the package URLs and version requirements straight out of `project.pbxproj`, hand them to the real Swift Package Manager solver (which still works fine), and drop the resulting lockfile back into the place Xcode reads it from.
+
+Implementation is a single pure-Python script using only the standard library — no `pip install`, no Node dependencies — and it must run on a macOS runner because it shells out to the Swift toolchain.
 
 ## Usage
 
@@ -54,8 +77,7 @@ jobs:
           body: '${{ steps.update.outputs.changed-count }} package(s) changed.'
 ```
 
-A complete working example lives at
-[`examples/update-spm.yml`](examples/update-spm.yml).
+A complete working example lives at [`examples/update-spm.yml`](examples/update-spm.yml).
 
 ## Inputs
 
@@ -76,25 +98,25 @@ A complete working example lives at
 
 ## Caveats
 
-- **Project-internal Package.resolved.** This action writes
-  `Package.resolved` to
+- **Project-internal `Package.resolved` only.** This Action writes to
   `<MyApp.xcodeproj>/project.xcworkspace/xcshareddata/swiftpm/Package.resolved`
   — the path Xcode reads when SPM is managed inside the `.xcodeproj` itself.
-  Projects that drive SPM from a standalone `.xcworkspace` (the resolved file
-  lives under the workspace, not the project) will need their workflow
-  adjusted, since this action does not write to that location.
+  Projects that drive SPM from a standalone `.xcworkspace` (where the resolved
+  file lives under the workspace, not the project) will need their workflow
+  adjusted, since this Action does not write to that location.
 - **Unsupported reference kinds.** Only `XCRemoteSwiftPackageReference` is
   parsed. Local packages (`XCLocalSwiftPackageReference`) and registry
   dependencies (`.package(id:)`) are skipped — they don't appear in the
   remote-reference section. Mirror those dependencies in your team's normal
   workflow.
-- **Match the Xcode used locally.** Run the action with the same Xcode version
-  your team uses (the `xcode-version` input). Package.resolved has a format
+- **Match the Xcode used locally.** Run the Action with the same Xcode version
+  your team uses (the `xcode-version` input). `Package.resolved` has a format
   version and an `originHash` field that changes across Xcode releases; if the
   CI-resolved file disagrees with what your local Xcode expects, Xcode will
   silently re-resolve on first open and clobber the PR.
 
-## How it works internally
+<details>
+<summary><strong>How it works internally</strong> (click to expand)</summary>
 
 `update_spm.py` is the entire implementation. From the repo root it does:
 
@@ -111,9 +133,11 @@ A complete working example lives at
    reports which identities changed.
 5. Unless `--dry-run` or `--fail-when-outdated`, copies the new file in place.
 
-The script is invoked from the action via `$GITHUB_ACTION_PATH/update_spm.py`,
-so the action is fully self-contained — consumers do not need to vendor the
+The script is invoked from the Action via `$GITHUB_ACTION_PATH/update_spm.py`,
+so the Action is fully self-contained — consumers do not need to vendor the
 script into their own repo.
+
+</details>
 
 ## License
 
