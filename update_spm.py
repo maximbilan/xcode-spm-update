@@ -111,8 +111,11 @@ def _dump_resolved(data):
     """Serialize a Package.resolved dict exactly the way SwiftPM does: 2-space
     indent, sorted keys, a space *before* each colon, trailing newline. Byte-identical
     to Xcode's own output, so an unchanged file round-trips with zero diff and a
-    values-only merge produces a values-only diff (no formatting churn)."""
-    return json.dumps(data, indent=2, separators=(",", " : "), sort_keys=True) + "\n"
+    values-only merge produces a values-only diff (no formatting churn). Matches
+    Foundation's JSONEncoder, which emits raw UTF-8 (ensure_ascii=False) so a
+    non-ASCII package name or URL isn't rewritten as \\uXXXX escapes."""
+    return json.dumps(data, indent=2, separators=(",", " : "),
+                      sort_keys=True, ensure_ascii=False) + "\n"
 
 
 def _state_summary(state):
