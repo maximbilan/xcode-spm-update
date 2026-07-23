@@ -7,6 +7,15 @@ on:
   workflow_dispatch: {}
 
 jobs:
+  unit:
+    # Pure-Python logic tests (lockfile discovery + in-place merge). No Swift
+    # toolchain needed, so run them fast on Linux.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run merge unit tests
+        run: python3 test/test_merge.py
+
   selftest:
     # Must be macOS — the action calls `xcrun swift package update`.
     runs-on: macos-latest

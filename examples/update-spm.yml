@@ -30,7 +30,7 @@ jobs:
         uses: maximbilan/xcode-spm-update@v1
         with:
           # Omit `project` to autodetect a single .xcodeproj under the repo root.
-          project: MySwimPro.xcodeproj
+          project: MyApp.xcodeproj
           # Pin the Xcode version so Package.resolved format/originHash matches
           # what your team's Xcode expects.
           xcode-version: '16.4'

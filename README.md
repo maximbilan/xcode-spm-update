@@ -40,12 +40,16 @@ Rather than fight `xcodebuild`, the Action sidesteps it:
         ▼
 synthetic Package.swift  ──►  xcrun swift package update  ──►  fresh Package.resolved
                                                                        │
-                                                                       │  copy back into
+                                                                       │  merge resolved pins into
+                                                                       │  every lockfile Xcode reads
                                                                        ▼
-                              .xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+                              .xcodeproj/project.xcworkspace/…/Package.resolved   (the project)
+                              <MyApp>.xcworkspace/…/Package.resolved              (each workspace)
 ```
 
-In other words: read the package URLs and version requirements straight out of `project.pbxproj`, hand them to the real Swift Package Manager solver (which still works fine), and drop the resulting lockfile back into the place Xcode reads it from.
+In other words: read the package URLs and version requirements straight out of `project.pbxproj`, hand them to the real Swift Package Manager solver (which still works fine), and merge the resulting pins back into the place(s) Xcode reads them from.
+
+Xcode keeps a **separate** `Package.resolved` per container — one inside the `.xcodeproj`, and one inside each `.xcworkspace`. `xcodebuild -workspace` (what most CI/release builds run) reads the **workspace** copy, so updating only the project copy silently misses real builds. The Action therefore updates every lockfile it finds, patching each **in place** (values only) so it keeps its own schema version and formatting, and never touches pins that belong only to a workspace's local packages.
 
 Implementation is a single pure-Python script using only the standard library — no `pip install`, no Node dependencies — and it must run on a macOS runner because it shells out to the Swift toolchain.
 
@@ -93,17 +97,18 @@ A complete working example lives at [`examples/update-spm.yml`](examples/update-
 
 | Name | Description |
 |------|-------------|
-| `dependencies-changed` | `'true'` if at least one pin would change, otherwise `'false'`. |
-| `changed-count` | Number of pins that changed, as an integer string. |
+| `dependencies-changed` | `'true'` if at least one pin would change in any lockfile, otherwise `'false'`. |
+| `changed-count` | Number of distinct package pins that changed across all lockfiles, as an integer string. |
 
 ## Caveats
 
-- **Project-internal `Package.resolved` only.** This Action writes to
-  `<MyApp.xcodeproj>/project.xcworkspace/xcshareddata/swiftpm/Package.resolved`
-  — the path Xcode reads when SPM is managed inside the `.xcodeproj` itself.
-  Projects that drive SPM from a standalone `.xcworkspace` (where the resolved
-  file lives under the workspace, not the project) will need their workflow
-  adjusted, since this Action does not write to that location.
+- **Existing workspace lockfiles only.** The Action updates the project's own
+  lockfile and every sibling `<MyApp>.xcworkspace/…/Package.resolved` that
+  already exists. It will **not** create a workspace lockfile from scratch: a
+  workspace's resolved graph includes dependencies pulled in by its local
+  packages, which the synthetic manifest never sees, so a freshly-authored file
+  would be incomplete. Open the workspace in Xcode once to generate the initial
+  lockfile, then the Action keeps it current.
 - **Unsupported reference kinds.** Only `XCRemoteSwiftPackageReference` is
   parsed. Local packages (`XCLocalSwiftPackageReference`) and registry
   dependencies (`.package(id:)`) are skipped — they don't appear in the
@@ -129,9 +134,13 @@ A complete working example lives at [`examples/update-spm.yml`](examples/update-
    `"a"..<"b"`, `branch:` and `revision:` map literally.
 3. Writes the synthetic `Package.swift` to a temp directory and runs
    `xcrun swift package update --package-path <tmp>`.
-4. Diffs the new `Package.resolved` against the project's current one and
-   reports which identities changed.
-5. Unless `--dry-run` or `--fail-when-outdated`, copies the new file in place.
+4. Finds every `Package.resolved` Xcode reads for the project (the one embedded
+   in the `.xcodeproj` plus each sibling `.xcworkspace`'s copy) and computes, per
+   file, which pins would change.
+5. Unless `--dry-run` or `--fail-when-outdated`, merges the new pins into each
+   lockfile in place — updating only the pins present in the fresh resolution,
+   preserving every file's schema version, `originHash`, and formatting, and
+   leaving workspace-only pins untouched.
 
 The script is invoked from the Action via `$GITHUB_ACTION_PATH/update_spm.py`,
 so the Action is fully self-contained — consumers do not need to vendor the
