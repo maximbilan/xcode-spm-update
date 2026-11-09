@@ -1,0 +1,67 @@
+{
+  "build-independent-targets-in-parallel": false,
+  "default-configuration": "Release",
+  "configurations": [
+    "Debug",
+    "Release",
+  ],
+  "localizations": {
+    "development": "en",
+    "supported": [
+      "Base",
+    ],
+  },
+  "packages": [
+    {
+      "kind": "remote",
+      "repository": "https://github.com/example/major",
+      "version": {
+        "up-to-next-major-version": "1.2.3",
+      },
+    }, {
+      "kind": "remote",
+      "repository": "https://github.com/example/minor.git",
+      "version": {
+        "up-to-next-minor-version": "2.3.4",
+      },
+    }, {
+      "kind": "remote",
+      "repository": "https://github.com/example/exact",
+      "version": {
+        "version": "3.4.5",
+      },
+    }, {
+      "kind": "remote",
+      "repository": "https://github.com/example/range",
+      "version": {
+        "version-range": "4.5.6..<5.0.0",
+      },
+    }, {
+      "kind": "remote",
+      "repository": "https://github.com/example/branch",
+      "version": {
+        "branch": "develop",
+      },
+    }, {
+      "kind": "remote",
+      "repository": "https://github.com/example/revision",
+      "version": {
+        "revision": "0123456789abcdef0123456789abcdef01234567",
+      },
+    }, {
+      "kind": "remote",
+      "repository": "https://github.com/example/prerelease.git",
+      "version": {
+        "version-range-min": "1.0.0-beta.1",
+        "version-range-max": "2.0.0",
+      },
+    }, {
+      "kind": "local",
+      "path": "LocalPkg",
+    },
+  ],
+  "files": [
+  ],
+  "products-group": null,
+  "last-upgrade": "27.2",
+}

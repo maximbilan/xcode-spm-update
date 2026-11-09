@@ -1,0 +1,147 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXGroup section */
+		AA0000000000000000000001 = {
+			isa = PBXGroup;
+			children = (
+			);
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXProject section */
+		AA0000000000000000000002 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastUpgradeCheck = 2720;
+			};
+			buildConfigurationList = AA0000000000000000000003 /* Build configuration list for PBXProject "Kinds" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = AA0000000000000000000001;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				BB0000000000000000000001 /* XCRemoteSwiftPackageReference "major" */,
+				BB0000000000000000000002 /* XCRemoteSwiftPackageReference "minor" */,
+				BB0000000000000000000003 /* XCRemoteSwiftPackageReference "exact" */,
+				BB0000000000000000000004 /* XCRemoteSwiftPackageReference "range" */,
+				BB0000000000000000000005 /* XCRemoteSwiftPackageReference "branch" */,
+				BB0000000000000000000006 /* XCRemoteSwiftPackageReference "revision" */,
+				BB0000000000000000000008 /* XCRemoteSwiftPackageReference "prerelease" */,
+				BB0000000000000000000007 /* XCLocalSwiftPackageReference "LocalPkg" */,
+			);
+			preferredProjectObjectVersion = 77;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+			);
+		};
+/* End PBXProject section */
+
+/* Begin XCBuildConfiguration section */
+		AA0000000000000000000004 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+			};
+			name = Debug;
+		};
+		AA0000000000000000000005 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		AA0000000000000000000003 /* Build configuration list for PBXProject "Kinds" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA0000000000000000000004 /* Debug */,
+				AA0000000000000000000005 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		BB0000000000000000000007 /* XCLocalSwiftPackageReference "LocalPkg" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = LocalPkg;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		BB0000000000000000000001 /* XCRemoteSwiftPackageReference "major" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/example/major";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.2.3;
+			};
+		};
+		BB0000000000000000000002 /* XCRemoteSwiftPackageReference "minor" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/example/minor.git";
+			requirement = {
+				kind = upToNextMinorVersion;
+				minimumVersion = 2.3.4;
+			};
+		};
+		BB0000000000000000000003 /* XCRemoteSwiftPackageReference "exact" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/example/exact";
+			requirement = {
+				kind = exactVersion;
+				version = 3.4.5;
+			};
+		};
+		BB0000000000000000000004 /* XCRemoteSwiftPackageReference "range" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/example/range";
+			requirement = {
+				kind = versionRange;
+				maximumVersion = 5.0.0;
+				minimumVersion = 4.5.6;
+			};
+		};
+		BB0000000000000000000005 /* XCRemoteSwiftPackageReference "branch" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/example/branch";
+			requirement = {
+				branch = develop;
+				kind = branch;
+			};
+		};
+		BB0000000000000000000006 /* XCRemoteSwiftPackageReference "revision" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/example/revision";
+			requirement = {
+				kind = revision;
+				revision = 0123456789abcdef0123456789abcdef01234567;
+			};
+		};
+		BB0000000000000000000008 /* XCRemoteSwiftPackageReference "prerelease" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/example/prerelease.git";
+			requirement = {
+				kind = versionRange;
+				maximumVersion = 2.0.0;
+				minimumVersion = "1.0.0-beta.1";
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+	};
+	rootObject = AA0000000000000000000002 /* Project object */;
+}

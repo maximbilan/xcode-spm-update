@@ -8,17 +8,25 @@ on:
 
 jobs:
   unit:
-    # Pure-Python logic tests (lockfile discovery + in-place merge). No Swift
-    # toolchain needed, so run them fast on Linux.
+    # Pure-Python logic tests (project parsing in both formats, lockfile
+    # discovery, in-place merge). No Swift toolchain needed, so run them fast on Linux.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Run parser unit tests
+        run: python3 test/test_parse.py
       - name: Run merge unit tests
         run: python3 test/test_merge.py
 
   selftest:
     # Must be macOS — the action calls `xcrun swift package update`.
     runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The same two packages in each project file format: classic
+        # project.pbxproj, and the JSON project.xcproj from Xcode 27.2+.
+        fixture: [Sample.xcodeproj, SampleJSON.xcodeproj]
     steps:
       - uses: actions/checkout@v4
 
@@ -31,7 +39,7 @@ jobs:
         id: action
         uses: ./
         with:
-          project: test/fixture/Sample.xcodeproj
+          project: test/fixture/${{ matrix.fixture }}
           dry-run: 'true'
 
       - name: Assert outputs are set
@@ -62,9 +70,11 @@ jobs:
           fi
 
       - name: Ensure dry-run did not write Package.resolved into the fixture
+        env:
+          FIXTURE: ${{ matrix.fixture }}
         run: |
           set -euo pipefail
-          resolved="test/fixture/Sample.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
+          resolved="test/fixture/${FIXTURE}/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
           if [ -e "$resolved" ]; then
             echo "::error::dry-run unexpectedly wrote $resolved"
             exit 1

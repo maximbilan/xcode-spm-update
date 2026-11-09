@@ -34,9 +34,9 @@ If your project is a pure Swift package (top-level `Package.swift`), you don't n
 Rather than fight `xcodebuild`, the Action sidesteps it:
 
 ```
-.xcodeproj/project.pbxproj
+.xcodeproj/project.pbxproj  or  .xcodeproj/project.xcproj (JSON, Xcode 27.2+)
         │
-        │  parse XCRemoteSwiftPackageReference entries
+        │  parse the remote package references
         ▼
 synthetic Package.swift  ──►  xcrun swift package update  ──►  fresh Package.resolved
                                                                        │
@@ -47,9 +47,11 @@ synthetic Package.swift  ──►  xcrun swift package update  ──►  fresh
                               <MyApp>.xcworkspace/…/Package.resolved              (each workspace)
 ```
 
-In other words: read the package URLs and version requirements straight out of `project.pbxproj`, hand them to the real Swift Package Manager solver (which still works fine), and merge the resulting pins back into the place(s) Xcode reads them from.
+In other words: read the package URLs and version requirements straight out of the project file, hand them to the real Swift Package Manager solver (which still works fine), and merge the resulting pins back into the place(s) Xcode reads them from.
 
 Xcode keeps a **separate** `Package.resolved` per container — one inside the `.xcodeproj`, and one inside each `.xcworkspace`. `xcodebuild -workspace` (what most CI/release builds run) reads the **workspace** copy, so updating only the project copy silently misses real builds. The Action therefore updates every lockfile it finds, patching each **in place** (values only) so it keeps its own schema version and formatting, and never touches pins that belong only to a workspace's local packages.
+
+Both project file formats are supported: the classic property-list `project.pbxproj`, and the [JSON `project.xcproj`](https://developer.apple.com/documentation/xcode/updating-your-xcode-project-configuration-file-format) that Xcode 27.2 and later writes by default. The Action detects which one the `.xcodeproj` contains; nothing in your workflow changes when you switch formats.
 
 Implementation is a single pure-Python script using only the standard library — no `pip install`, no Node dependencies — and it must run on a macOS runner because it shells out to the Swift toolchain.
 
@@ -109,11 +111,11 @@ A complete working example lives at [`examples/update-spm.yml`](examples/update-
   packages, which the synthetic manifest never sees, so a freshly-authored file
   would be incomplete. Open the workspace in Xcode once to generate the initial
   lockfile, then the Action keeps it current.
-- **Unsupported reference kinds.** Only `XCRemoteSwiftPackageReference` is
-  parsed. Local packages (`XCLocalSwiftPackageReference`) and registry
-  dependencies (`.package(id:)`) are skipped — they don't appear in the
-  remote-reference section. Mirror those dependencies in your team's normal
-  workflow.
+- **Unsupported reference kinds.** Only remote package references are parsed
+  (`XCRemoteSwiftPackageReference` in `project.pbxproj`, `"kind": "remote"` in
+  `project.xcproj`). Local packages and registry dependencies
+  (`.package(id:)`) are skipped. Mirror those dependencies in your team's
+  normal workflow.
 - **Match the Xcode used locally.** Run the Action with the same Xcode version
   your team uses (the `xcode-version` input). `Package.resolved` has a format
   version and an `originHash` field that changes across Xcode releases; if the
@@ -125,13 +127,24 @@ A complete working example lives at [`examples/update-spm.yml`](examples/update-
 
 `update_spm.py` is the entire implementation. From the repo root it does:
 
-1. Reads `project.pbxproj` and slices out the
-   `Begin XCRemoteSwiftPackageReference section` ... `End ...` block.
-2. For each reference: pulls `repositoryURL` and the `requirement = { ... }`
-   dict, then maps the pbxproj `kind` to a Swift `.package(url:...)` argument:
-   `upToNextMajorVersion` → `from:`, `upToNextMinorVersion` →
-   `.upToNextMinor(from:)`, `exactVersion` → `exact:`, `versionRange` →
-   `"a"..<"b"`, `branch:` and `revision:` map literally.
+1. Reads the `.xcodeproj`'s project file, whichever format it is in (a bundle
+   holding both is rejected, as Xcode does):
+   - `project.pbxproj`: slices out the
+     `Begin XCRemoteSwiftPackageReference section` ... `End ...` block, and
+     pulls each reference's `repositoryURL` and `requirement = { ... }` dict.
+   - `project.xcproj`: parses the JSON (allowing the trailing commas and
+     comments the format permits) and takes each `"kind": "remote"` entry in
+     `packages`, with its `repository` and `version` object.
+2. Maps each requirement to a Swift `.package(url:...)` argument:
+
+   | `project.pbxproj` `kind` | `project.xcproj` `version` key | `Package.swift` |
+   |---|---|---|
+   | `upToNextMajorVersion` | `up-to-next-major-version` | `from:` |
+   | `upToNextMinorVersion` | `up-to-next-minor-version` | `.upToNextMinor(from:)` |
+   | `exactVersion` | `version` | `exact:` |
+   | `versionRange` | `version-range` (`"a..<b"`), or `version-range-min` + `version-range-max` | `"a"..<"b"` |
+   | `branch` | `branch` | `branch:` |
+   | `revision` | `revision` | `revision:` |
 3. Writes the synthetic `Package.swift` to a temp directory and runs
    `xcrun swift package update --package-path <tmp>`.
 4. Finds every `Package.resolved` Xcode reads for the project (the one embedded

@@ -5,8 +5,9 @@ update_spm.py — Update an Xcode project's Swift Package dependencies from the 
 Why this exists: `xcodebuild -resolvePackageDependencies` (the usual CLI path, and
 what the only off-the-shelf Action wraps) stopped reliably bumping versions in
 Xcode 16+. This routes around it: it reads the dependency *requirements* straight
-out of project.pbxproj, writes a throwaway Package.swift, lets the real `swift`
-toolchain do the resolving (PubGrub solver, transitive graph, the works), then
+out of the project file — the classic property-list project.pbxproj, or the JSON
+project.xcproj that Xcode 27.2+ writes — then writes a throwaway Package.swift,
+lets the real `swift` toolchain do the resolving (PubGrub solver, transitive graph, the works), then
 merges the freshly resolved pins back into *every* Package.resolved Xcode reads
 for the project — the one embedded in the .xcodeproj AND the one inside any sibling
 .xcworkspace, since `xcodebuild -workspace` (CI/release builds) reads the workspace
@@ -46,10 +47,60 @@ REMOTE_RE = re.compile(
 )
 KV_RE = re.compile(r'(\w+)\s*=\s*"?([^";{}]+?)"?\s*;')
 
+# The project definition file inside a .xcodeproj bundle. Xcode 27.2+ defaults to
+# the JSON format; a bundle holds exactly one of the two.
+PBXPROJ = "project.pbxproj"
+XCPROJ = "project.xcproj"
 
-def parse_dependencies(pbxproj_path):
-    """Return a list of dicts: {name, url, requirement_swift} parsed from pbxproj."""
-    text = open(pbxproj_path, encoding="utf-8").read()
+# project.xcproj is JSON plus two relaxations Xcode both writes and reads: trailing
+# commas, and // or /* */ comments. Each regex matches a whole string literal first,
+# so comment markers or commas *inside* strings (URLs, shell scripts) are left alone.
+_JSON_STRING = r'"(?:\\.|[^"\\])*"'
+_JSON_COMMENT_RE = re.compile(_JSON_STRING + r'|//[^\n]*|/\*.*?\*/', re.S)
+_JSON_TRAILING_COMMA_RE = re.compile(f'({_JSON_STRING})|,(\\s*[}}\\]])')
+
+# How project.xcproj spells each version requirement inside a package's "version"
+# object, in the order Xcode's own decoder checks them (apple/xcode-project-format,
+# SwiftPackageVersionConstraint.swift), mapped onto the pbxproj requirement dict
+# that _requirement_to_swift already understands. Ranges are handled separately.
+_XCPROJ_REQUIREMENTS = (
+    ("revision", "revision", "revision"),
+    ("branch", "branch", "branch"),
+    ("version", "exactVersion", "version"),
+    ("up-to-next-minor-version", "upToNextMinorVersion", "minimumVersion"),
+    ("up-to-next-major-version", "upToNextMajorVersion", "minimumVersion"),
+)
+
+
+def locate_project_file(project):
+    """Return the path of the .xcodeproj bundle's project definition file.
+
+    Raises ValueError if the bundle has neither file, or has both: Xcode itself
+    refuses to open a bundle with both, so we don't guess which one is current.
+    """
+    present = [os.path.join(project, f) for f in (PBXPROJ, XCPROJ)
+               if os.path.exists(os.path.join(project, f))]
+    if not present:
+        raise ValueError(f"neither {PBXPROJ} nor {XCPROJ} found in {project}")
+    if len(present) > 1:
+        raise ValueError(f"{project} contains both {PBXPROJ} and {XCPROJ}; Xcode refuses "
+                         "to open a project like this, so remove the obsolete one")
+    return present[0]
+
+
+def parse_dependencies(project_file):
+    """Return a list of dicts: {name, url, requirement_swift}, sorted by name, for
+    every remote package in a project.pbxproj or a JSON project.xcproj."""
+    if project_file.endswith(".xcproj"):
+        deps = _parse_xcproj(project_file)
+    else:
+        deps = _parse_pbxproj(project_file)
+    deps.sort(key=lambda d: d["name"].lower())
+    return deps
+
+
+def _parse_pbxproj(path):
+    text = open(path, encoding="utf-8").read()
     try:
         section = text.split("Begin XCRemoteSwiftPackageReference section")[1]
         section = section.split("End XCRemoteSwiftPackageReference section")[0]
@@ -64,8 +115,65 @@ def parse_dependencies(pbxproj_path):
             "url": m.group("url"),
             "requirement_swift": _requirement_to_swift(req, m.group("name")),
         })
-    deps.sort(key=lambda d: d["name"].lower())
     return deps
+
+
+def _parse_xcproj(path):
+    data = _loads_relaxed_json(open(path, encoding="utf-8").read())
+    deps = []
+    for pkg in data.get("packages", []):
+        if pkg.get("kind") != "remote":
+            continue  # local packages resolve from disk; nothing to update
+        url = pkg.get("repository")
+        if not url:
+            raise ValueError(f"remote package without a repository URL: {pkg!r}")
+        name = _package_name_from_url(url)
+        req = _xcproj_requirement(pkg.get("version"), name)
+        deps.append({"name": name, "url": url,
+                     "requirement_swift": _requirement_to_swift(req, name)})
+    return deps
+
+
+def _loads_relaxed_json(text):
+    """json.loads for project.xcproj: drop comments and trailing commas first.
+    Removed characters become spaces, so a JSONDecodeError still reports the
+    right line and column."""
+    def blank_comment(m):
+        s = m.group(0)
+        return s if s.startswith('"') else re.sub(r"[^\n]", " ", s)
+
+    text = _JSON_COMMENT_RE.sub(blank_comment, text)
+    text = _JSON_TRAILING_COMMA_RE.sub(lambda m: m.group(1) or " " + m.group(2), text)
+    return json.loads(text)
+
+
+def _package_name_from_url(url):
+    """Display name for a package: the repository's last path component without
+    `.git` (what the pbxproj format shows in its reference comments)."""
+    last = url.rstrip("/").rsplit("/", 1)[-1]
+    return last[:-len(".git")] if last.endswith(".git") else last
+
+
+def _xcproj_requirement(version, name):
+    """Translate a project.xcproj package "version" object into the pbxproj-style
+    requirement dict, so both formats share one path to Package.swift."""
+    if not isinstance(version, dict):
+        raise ValueError(f"no version requirement for dependency '{name}'")
+    for key, kind, field in _XCPROJ_REQUIREMENTS:
+        if key in version:
+            return {"kind": kind, field: version[key]}
+    if "version-range" in version:
+        # Compact form, written when both bounds are plain numbers: "1.0.0..<2.0.0".
+        value = version["version-range"]
+        lo, sep, hi = value.partition("..<")
+        if not sep or "..<" in hi:
+            raise ValueError(f"unexpected version-range '{value}' for dependency '{name}'")
+        return {"kind": "versionRange", "minimumVersion": lo, "maximumVersion": hi}
+    if "version-range-min" in version and "version-range-max" in version:
+        # Long form, written when a bound isn't a plain number (e.g. a pre-release).
+        return {"kind": "versionRange", "minimumVersion": version["version-range-min"],
+                "maximumVersion": version["version-range-max"]}
+    raise ValueError(f"unsupported version requirement {sorted(version)} for dependency '{name}'")
 
 
 def _requirement_to_swift(req, name):
@@ -249,13 +357,18 @@ def main():
                   file=sys.stderr)
         return 1
 
-    pbxproj = os.path.join(project, "project.pbxproj")
-    if not os.path.exists(pbxproj):
-        print(f"error: {pbxproj} not found", file=sys.stderr)
+    try:
+        project_file = locate_project_file(project)
+    except ValueError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    try:
+        deps = parse_dependencies(project_file)
+    except ValueError as e:  # includes json.JSONDecodeError
+        print(f"error: {project_file}: {e}", file=sys.stderr)
         return 1
 
-    print(f"Project: {project}")
-    deps = parse_dependencies(pbxproj)
+    print(f"Project: {project} ({os.path.basename(project_file)})")
     if not deps:
         print("No remote Swift Package dependencies found.")
         emit_outputs(0)
