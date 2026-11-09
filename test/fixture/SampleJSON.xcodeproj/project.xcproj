@@ -1,0 +1,33 @@
+{
+  "build-independent-targets-in-parallel": false,
+  "default-configuration": "Release",
+  "configurations": [
+    "Debug",
+    "Release",
+  ],
+  "localizations": {
+    "development": "en",
+    "supported": [
+      "Base",
+    ],
+  },
+  "packages": [
+    {
+      "kind": "remote",
+      "repository": "https://github.com/apple/swift-log",
+      "version": {
+        "up-to-next-major-version": "1.0.0",
+      },
+    }, {
+      "kind": "remote",
+      "repository": "https://github.com/apple/swift-collections",
+      "version": {
+        "up-to-next-major-version": "1.0.0",
+      },
+    },
+  ],
+  "files": [
+  ],
+  "products-group": null,
+  "last-upgrade": "27.2",
+}

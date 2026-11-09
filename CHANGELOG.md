@@ -5,6 +5,23 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.3] - 2026-11-09
+
+### Added
+- Support for the JSON project file format (`<Name>.xcodeproj/project.xcproj`)
+  that Xcode 27.2 and later writes by default. Previously the Action failed
+  on these projects with `error: <Name>.xcodeproj/project.pbxproj not found`.
+  The format is detected automatically: remote packages and every version
+  requirement kind are read from the `packages` array, including the
+  `version-range-min`/`version-range-max` form Xcode uses for pre-release
+  bounds. Lockfile locations are unchanged.
+
+### Changed
+- A `.xcodeproj` that contains both `project.pbxproj` and `project.xcproj` is
+  now rejected with a clear error, matching Xcode, which refuses to open it.
+- An unsupported or missing version requirement now prints a one-line
+  `error:` and exits 1, instead of a Python traceback.
+
 ## [1.0.2] - 2026-07-23
 
 ### Fixed
